@@ -58,28 +58,3 @@ case class CellPoint(x: Double, y: Double)
   * @param blue Level of blue, 0 ≤ blue ≤ 255
   */
 case class Color(red: Int, green: Int, blue: Int)
-
-case class Station(stn: Option[Int], wban: Option[Int], latitude: Option[Double], longitude: Option[Double])
-
-object Station {
-
-  val structType = StructType(Seq(
-    StructField("stn", IntegerType, nullable = true),
-    StructField("wban", IntegerType, nullable = true),
-    StructField("latitude", DoubleType, nullable = true),
-    StructField("longitude", DoubleType, nullable = true)
-  ))
-}
-
-case class Record(stn: Option[Int], wban: Option[Int], month: Int, day: Int, temperature: Double)
-
-object Record {
-
-  val structType = StructType(Seq(
-    StructField("stn", IntegerType, nullable = true),
-    StructField("wban", IntegerType, nullable = true),
-    StructField("month", IntegerType, nullable = false),
-    StructField("day", IntegerType, nullable = false),
-    StructField("temperature", DoubleType, nullable = false)
-  ))
-}

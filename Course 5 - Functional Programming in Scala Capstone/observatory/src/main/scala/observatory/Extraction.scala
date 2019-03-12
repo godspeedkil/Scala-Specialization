@@ -4,7 +4,7 @@ import java.nio.file.Paths
 import java.time.LocalDate
 
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Encoders, SparkSession}
 import org.apache.spark.sql.functions._
 
 /**
@@ -35,23 +35,49 @@ object Extraction {
     * @return A sequence containing triplets (date, location, temperature)
     */
   def locateTemperatures(year: Year, stationsFile: String, temperaturesFile: String): Iterable[(LocalDate, Location, Temperature)] = {
-    val stationsDf = spark.read
-      .option("header", value = false)
-      .option("mode", "FAILFAST")
-      .schema(Station.structType)
-      .csv(resourcesPath(stationsFile))
-      .as[Station]
-      .filter((station: Station) => station.latitude.isDefined && station.longitude.isDefined)
-    val temperaturesDf = spark.read
-      .option("header", value = false)
-      .option("mode", "FAILFAST")
-      .schema(Record.structType)
-      .csv(resourcesPath(temperaturesFile))
-      .as[Record]
-      .filter((record: Record) => record.temperature != 9999.9)
+//    val stationsDf = spark.read
+//      .option("header", value = false)
+//      .option("mode", "FAILFAST")
+//      .schema(Station.structType)
+//      .csv(resourcesPath(stationsFile))
+//      .as[Station]
+//      .filter((station: Station) => station.latitude.isDefined && station.longitude.isDefined)
+//    val temperaturesDf = spark.read
+//      .option("header", value = false)
+//      .option("mode", "FAILFAST")
+//      .schema(Record.structType)
+//      .csv(resourcesPath(temperaturesFile))
+//      .as[Record]
+//      .filter((record: Record) => record.temperature != 9999.9)
 
-//    stationsDs.show()
-//    temperaturesDs.show()
+    val stationsDf = spark.read
+      .schema(Encoders.product[StationsRow].schema)
+      .csv(resourcesPath(stationsFile))
+      .filter($"latitude".isNotNull && $"longitude".isNotNull)
+    val temperaturesDf = spark.read
+      .schema(Encoders.product[TemperaturesRow].schema)
+      .csv(resourcesPath(temperaturesFile))
+      .filter($"temperature".notEqual("9999.9"))
+
+//    stationsDf.show()
+//    temperaturesDf.show()
+
+    val finalDf = stationsDf.join(temperaturesDf,
+      stationsDf("stn") <=> temperaturesDf("stn") &&
+      stationsDf("wban") <=> temperaturesDf("wban"))
+      .drop(temperaturesDf("stn"))
+      .drop(temperaturesDf("wban"))
+      .as[FinalRow]
+
+//    finalDf.show()
+
+    finalDf.collect()
+      .seq
+        .map(row => (
+          LocalDate.of(year, row.month, row.day),
+          Location(row.latitude, row.longitude),
+          row.temperature.toCelsius
+        ))
 
 //    val stationsSchema = StructType(
 //      List(
@@ -75,18 +101,18 @@ object Extraction {
 //    val stationsRdd = spark.sparkContext.textFile(stationsFile)
 //    val temperaturesRdd = spark.sparkContext.textFile(temperaturesFile)
 
-    stationsDf.join(temperaturesDf,
-      stationsDf("stn") <=> temperaturesDf("stn") &&
-      stationsDf("wban") <=> temperaturesDf("wban"))
-      .drop(temperaturesDf("stn"))
-      .drop(temperaturesDf("wban"))
-      .as[FinalRow]
-      .map(row => (
-        LocalDate.of(year, row.month, row.day),
-        Location(row.latitude, row.longitude),
-        row.temperature.toCelsius
-      ))
-      .collect()
+//    stationsDf.join(temperaturesDf,
+//      stationsDf("stn") <=> temperaturesDf("stn") &&
+//      stationsDf("wban") <=> temperaturesDf("wban"))
+//      .drop(temperaturesDf("stn"))
+//      .drop(temperaturesDf("wban"))
+//      .as[FinalRow]
+//      .map(row => (
+//        LocalDate.of(year, row.month, row.day),
+//        Location(row.latitude, row.longitude),
+//        row.temperature.toCelsius
+//      ))
+//      .collect()
 //      .seq
 //      .map(row => (
 //        LocalDate.of(year, row.getAs[Int]("month"), row.getAs[Int]("day")),
@@ -114,26 +140,26 @@ object Extraction {
       .map(row => (row._1.getYear, row._2, row._3))
       .toDF("year", "location", "temperature")
       .groupBy($"year", $"location")
-      .agg($"year", $"lock", avg($"temperature").as("temperature"))
+      .agg($"year", $"location", avg($"temperature").as("temperature"))
       .select($"location".as[Location], $"temperature".as[Double])
       .collect()
       .seq
   }
 
-//  case class StationsRow(
-//                        stn: String,
-//                        wban: String,
-//                        latitude: Double,
-//                        longitude: Double
-//                        )
-//
-//  case class TemperaturesRow(
-//                            stn: String,
-//                            wban: String,
-//                            month: Int,
-//                            day: Int,
-//                            temperature: Double
-//                            )
+  case class StationsRow(
+                        stn: String,
+                        wban: String,
+                        latitude: Double,
+                        longitude: Double
+                        )
+
+  case class TemperaturesRow(
+                            stn: String,
+                            wban: String,
+                            month: Int,
+                            day: Int,
+                            temperature: Double
+                            )
 
   case class FinalRow(
                      stn: String,
