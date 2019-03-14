@@ -10,12 +10,6 @@ object implicits {
   implicit class farenheitToCelsius(farenheit: Double) {
     def toCelsius: Double = (farenheit - 32) * 5 / 9
   }
-
-  implicit def kryoEncoder[A](implicit ct: ClassTag[A]): Encoder[A] =
-    org.apache.spark.sql.Encoders.kryo[A](ct)
-
-  implicit def tuple3[A1, A2, A3](implicit e1: Encoder[A1], e2: Encoder[A2], e3: Encoder[A3]): Encoder[(A1, A2, A3)] =
-    Encoders.tuple[A1, A2, A3](e1, e2, e3)
 }
 
 /**

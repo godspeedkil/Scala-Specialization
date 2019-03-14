@@ -1,11 +1,13 @@
 package observatory
 
 import java.nio.file.Paths
+import java.sql.Date
 import java.time.LocalDate
 
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.{Encoders, SparkSession}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.StructType
 
 /**
   *
@@ -19,7 +21,9 @@ object Extraction {
     SparkSession
       .builder()
       .appName("Observatory")
-      .master("local")
+      .master("local[*]")
+//    .config("spark.driver.memory", "20g")
+//    .config("spark.exectuor.memory", "5g")
       .getOrCreate()
 
   import spark.implicits._
@@ -35,20 +39,6 @@ object Extraction {
     * @return A sequence containing triplets (date, location, temperature)
     */
   def locateTemperatures(year: Year, stationsFile: String, temperaturesFile: String): Iterable[(LocalDate, Location, Temperature)] = {
-//    val stationsDf = spark.read
-//      .option("header", value = false)
-//      .option("mode", "FAILFAST")
-//      .schema(Station.structType)
-//      .csv(resourcesPath(stationsFile))
-//      .as[Station]
-//      .filter((station: Station) => station.latitude.isDefined && station.longitude.isDefined)
-//    val temperaturesDf = spark.read
-//      .option("header", value = false)
-//      .option("mode", "FAILFAST")
-//      .schema(Record.structType)
-//      .csv(resourcesPath(temperaturesFile))
-//      .as[Record]
-//      .filter((record: Record) => record.temperature != 9999.9)
 
     val stationsDf = spark.read
       .schema(Encoders.product[StationsRow].schema)
@@ -59,75 +49,34 @@ object Extraction {
       .csv(resourcesPath(temperaturesFile))
       .filter($"temperature".notEqual("9999.9"))
 
-//    stationsDf.show()
-//    temperaturesDf.show()
+    //    stationsDf.show()
+    //    temperaturesDf.show()
 
     val finalDf = stationsDf.join(temperaturesDf,
-      stationsDf("stn") <=> temperaturesDf("stn") &&
-      stationsDf("wban") <=> temperaturesDf("wban"))
+      stationsDf("stn") <=> temperaturesDf("stn")  &&
+        stationsDf("wban") <=> temperaturesDf("wban"))
       .drop(temperaturesDf("stn"))
       .drop(temperaturesDf("wban"))
       .as[FinalRow]
 
-//    finalDf.show()
-
-    finalDf.collect()
-      .seq
-        .map(row => (
-          LocalDate.of(year, row.month, row.day),
-          Location(row.latitude, row.longitude),
-          row.temperature.toCelsius
-        ))
-
-//    val stationsSchema = StructType(
-//      List(
-//      StructField("STN identifier", StringType, nullable = false),
-//      StructField("WBAN identifier", StringType, nullable = true),
-//      StructField("Latitude", DoubleType, nullable = false),
-//      StructField("Longitude", DoubleType, nullable = false)
-//      )
-//    )
-//
-//    val temperaturesSchema = StructType(
-//      List(
-//        StructField("STN identifier", StringType, nullable = false),
-//        StructField("WBAN identifier", StringType, nullable = true),
-//        StructField("Month", IntegerType, nullable = false),
-//        StructField("Day", IntegerType, nullable = false),
-//        StructField("Temperature", DoubleType, nullable = false)
-//      )
-//    )
-
-//    val stationsRdd = spark.sparkContext.textFile(stationsFile)
-//    val temperaturesRdd = spark.sparkContext.textFile(temperaturesFile)
-
-//    stationsDf.join(temperaturesDf,
-//      stationsDf("stn") <=> temperaturesDf("stn") &&
-//      stationsDf("wban") <=> temperaturesDf("wban"))
-//      .drop(temperaturesDf("stn"))
-//      .drop(temperaturesDf("wban"))
-//      .as[FinalRow]
+//    val finalRdd = finalDf.rdd
 //      .map(row => (
 //        LocalDate.of(year, row.month, row.day),
 //        Location(row.latitude, row.longitude),
 //        row.temperature.toCelsius
 //      ))
-//      .collect()
-//      .seq
-//      .map(row => (
-//        LocalDate.of(year, row.getAs[Int]("month"), row.getAs[Int]("day")),
-//        Location(row.getAs[Double]("latitude"), row.getAs[Double]("longitude")),
-//        row.getAs[Double]("temperature").toCelsius
-//      ))
-
-//    finalDf.show(100)
 //
-//    finalDf.map(row => (
-//      LocalDate.of(year, row.month, row.day),
-//      Location(row.latitude, row.longitude),
-//      (row.temperature - 32) / (9 / 5)
-//      ))
-//      .collect()
+//    finalRdd.collect()
+
+//    finalDf.show()
+
+    finalDf.collect()
+      .seq
+      .map(row => (
+      LocalDate.of(year, row.month, row.day),
+      Location(row.latitude, row.longitude),
+      row.temperature.toCelsius
+    ))
   }
 
   /**
@@ -143,37 +92,30 @@ object Extraction {
       .agg($"year", $"location", avg($"temperature").as("temperature"))
       .select($"location".as[Location], $"temperature".as[Double])
       .collect()
-      .seq
   }
 
   case class StationsRow(
-                        stn: String,
-                        wban: String,
-                        latitude: Double,
-                        longitude: Double
+                          stn: String,
+                          wban: String,
+                          latitude: Double,
+                          longitude: Double
                         )
 
   case class TemperaturesRow(
-                            stn: String,
-                            wban: String,
-                            month: Int,
-                            day: Int,
-                            temperature: Double
+                              stn: String,
+                              wban: String,
+                              month: Int,
+                              day: Int,
+                              temperature: Double
                             )
 
   case class FinalRow(
-                     stn: String,
-                     wban: String,
-                     latitude: Double,
-                     longitude: Double,
-                     month: Int,
-                     day: Int,
-                     temperature: Double
+                       stn: String,
+                       wban: String,
+                       latitude: Double,
+                       longitude: Double,
+                       month: Int,
+                       day: Int,
+                       temperature: Double
                      )
-//
-//  case class ResultRow(
-//                      date: LocalDate,
-//                      location: Location,
-//                      temperature: Temperature
-//                      )
 }
